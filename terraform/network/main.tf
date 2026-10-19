@@ -87,10 +87,20 @@ resource "aws_default_security_group" "main" {
   egress  = []
 }
 
-# Store VPC Flow Logs in CloudWatch Logs.
+resource "aws_kms_key" "vpc_flow_logs" {
+  description             = "KMS key for VPC Flow Logs CloudWatch log group"
+  enable_key_rotation     = true
+  deletion_window_in_days = 7
+
+  tags = {
+    Name = "infra-vpc-flow-logs-key"
+  }
+}
+
 resource "aws_cloudwatch_log_group" "vpc_flow_logs" {
   name              = "/aws/vpc/infra-vpc/flow-logs"
-  retention_in_days = 7
+  retention_in_days = 365
+  kms_key_id        = aws_kms_key.vpc_flow_logs.arn
 
   tags = {
     Name = "infra-vpc-flow-logs"
