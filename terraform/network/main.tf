@@ -2,7 +2,6 @@ data "aws_caller_identity" "current" {}
 
 data "aws_region" "current" {}
 
-
 resource "aws_vpc" "main" {
   cidr_block           = var.vpc_cidr
   enable_dns_hostnames = true
@@ -92,7 +91,6 @@ resource "aws_default_security_group" "main" {
   egress  = []
 }
 
-
 resource "aws_kms_key" "vpc_flow_logs" {
   description             = "KMS key for VPC Flow Logs CloudWatch log group"
   enable_key_rotation     = true
@@ -118,7 +116,7 @@ resource "aws_kms_key" "vpc_flow_logs" {
         Effect = "Allow"
 
         Principal = {
-          Service = "logs.${data.aws_region.current.name}.amazonaws.com"
+          Service = "logs.${data.aws_region.current.region}.amazonaws.com"
         }
 
         Action = [
@@ -133,7 +131,7 @@ resource "aws_kms_key" "vpc_flow_logs" {
 
         Condition = {
           StringLike = {
-            "kms:EncryptionContext:aws:logs:arn" = "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/vpc/infra-vpc/flow-logs"
+            "kms:EncryptionContext:aws:logs:arn" = "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/vpc/infra-vpc/flow-logs"
           }
         }
       }
@@ -144,7 +142,6 @@ resource "aws_kms_key" "vpc_flow_logs" {
     Name = "infra-vpc-flow-logs-key"
   }
 }
-
 
 resource "aws_cloudwatch_log_group" "vpc_flow_logs" {
   name              = "/aws/vpc/infra-vpc/flow-logs"
@@ -163,9 +160,11 @@ resource "aws_iam_role" "vpc_flow_logs" {
     Version = "2012-10-17"
     Statement = [{
       Effect = "Allow"
+
       Principal = {
         Service = "vpc-flow-logs.amazonaws.com"
       }
+
       Action = "sts:AssumeRole"
     }]
   })
@@ -179,12 +178,14 @@ resource "aws_iam_role_policy" "vpc_flow_logs" {
     Version = "2012-10-17"
     Statement = [{
       Effect = "Allow"
+
       Action = [
         "logs:CreateLogStream",
         "logs:PutLogEvents",
         "logs:DescribeLogGroups",
         "logs:DescribeLogStreams"
       ]
+
       Resource = "${aws_cloudwatch_log_group.vpc_flow_logs.arn}:*"
     }]
   })
