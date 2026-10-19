@@ -1,19 +1,28 @@
 resource "aws_vpc" "main" {
   cidr_block           = var.vpc_cidr
   enable_dns_hostnames = true
-  tags                 = { Name = "infra-vpc" }
+
+  tags = {
+    Name = "infra-vpc"
+  }
 }
 
 resource "aws_internet_gateway" "igw" {
   vpc_id = aws_vpc.main.id
-  tags   = { Name = "infra-igw" }
+
+  tags = {
+    Name = "infra-igw"
+  }
 }
 
 resource "aws_subnet" "public" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = var.public_subnet_cidr
   map_public_ip_on_launch = false
-  tags                    = { Name = "infra-public-subnet" }
+
+  tags = {
+    Name = "infra-public-subnet"
+  }
 }
 
 resource "aws_route_table" "public" {
@@ -24,7 +33,9 @@ resource "aws_route_table" "public" {
     gateway_id = aws_internet_gateway.igw.id
   }
 
-  tags = { Name = "infra-public-rt" }
+  tags = {
+    Name = "infra-public-rt"
+  }
 }
 
 resource "aws_route_table_association" "public" {
@@ -34,27 +45,21 @@ resource "aws_route_table_association" "public" {
 
 resource "aws_security_group" "app" {
   name        = "infra-app-sg"
-  description = "Allow app port from the internet"
+  description = "Allow app traffic"
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description = "App port from the internet"
+    description = "Application traffic"
     from_port   = 5000
     to_port     = 5000
     protocol    = "tcp"
     cidr_blocks = [var.app_ingress_cidr]
   }
 
-  ingress {
-    description = "SSH from my IP"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = [var.ssh_cidr]
-  }
+  # SSM is used for administration; SSH ingress is not required.
 
-  ingress {
-    description = "HTTP from the internet"
+  egress {
+    description = "HTTP for package downloads"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
@@ -62,12 +67,82 @@ resource "aws_security_group" "app" {
   }
 
   egress {
-    description = "Allow outbound traffic"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
+    description = "HTTPS for package and Docker image downloads"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = { Name = "infra-app-sg" }
+  tags = {
+    Name = "infra-app-sg"
+  }
+}
+
+# Restrict the VPC's default security group.
+resource "aws_default_security_group" "main" {
+  vpc_id = aws_vpc.main.id
+
+  ingress = []
+  egress  = []
+}
+
+# Store VPC Flow Logs in CloudWatch Logs.
+resource "aws_cloudwatch_log_group" "vpc_flow_logs" {
+  name              = "/aws/vpc/infra-vpc/flow-logs"
+  retention_in_days = 7
+
+  tags = {
+    Name = "infra-vpc-flow-logs"
+  }
+}
+
+resource "aws_iam_role" "vpc_flow_logs" {
+  name = "infra-vpc-flow-logs-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Service = "vpc-flow-logs.amazonaws.com"
+      }
+      Action = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "vpc_flow_logs" {
+  name = "infra-vpc-flow-logs-policy"
+  role = aws_iam_role.vpc_flow_logs.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams"
+      ]
+      Resource = "${aws_cloudwatch_log_group.vpc_flow_logs.arn}:*"
+    }]
+  })
+}
+
+resource "aws_flow_log" "main" {
+  vpc_id               = aws_vpc.main.id
+  traffic_type         = "ALL"
+  log_destination_type = "cloud-watch-logs"
+  log_destination      = aws_cloudwatch_log_group.vpc_flow_logs.arn
+  iam_role_arn         = aws_iam_role.vpc_flow_logs.arn
+
+  depends_on = [
+    aws_iam_role_policy.vpc_flow_logs
+  ]
+
+  tags = {
+    Name = "infra-vpc-flow-logs"
+  }
 }

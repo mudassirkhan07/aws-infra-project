@@ -21,6 +21,7 @@ resource "aws_iam_instance_profile" "ec2_ssm" {
   role = aws_iam_role.ec2_ssm.name
 }
 
+#checkov:skip=CKV_AWS_88:Public IP is retained for direct access to this learning demo; use SSM for administration.
 resource "aws_instance" "app" {
   ami                         = var.ami_id
   instance_type               = var.instance_type
@@ -28,6 +29,9 @@ resource "aws_instance" "app" {
   vpc_security_group_ids      = [aws_security_group.app.id]
   associate_public_ip_address = true
   iam_instance_profile        = aws_iam_instance_profile.ec2_ssm.name
+
+  ebs_optimized = true
+  monitoring    = true
 
   metadata_options {
     http_tokens = "required"
