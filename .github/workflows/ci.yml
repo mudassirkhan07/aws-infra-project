@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: app/requirements-dev.txt
+      - name: Install dependencies
+        working-directory: app
+        run: pip install -r requirements-dev.txt
+      - name: Run tests
+        working-directory: app
+        run: pytest
+
+  hadolint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint Dockerfile
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: app/Dockerfile
+
+  checkov:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan Dockerfile and Terraform
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: .
+          framework: terraform,dockerfile
+          quiet: true
+
+  trivy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t preview-app:ci --build-arg GIT_SHA=${{ github.sha }} app
+      - name: Export image
+        run: docker save preview-app:ci -o image.tar
+      - name: Scan image with pinned Trivy
+        run: |
+          docker run --rm -v "$PWD:/work" ghcr.io/aquasecurity/trivy:0.69.3 \
+            image --input /work/image.tar --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1
