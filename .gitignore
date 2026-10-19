@@ -1,18 +1,29 @@
 # Terraform
+.terraform/
 *.tfstate
 *.tfstate.*
-.terraform/
 *.tfvars
+*.tfplan
 crash.log
+
 # Secrets
 *.pem
 .env
 *.key
+
 # Python
 __pycache__/
 *.pyc
 venv/
 .venv/
+
 # OS and editor
 .DS_Store
 .vscode/
+# Terraform local state and backups
+terraform-state-backup.json
+terraform.tfstate.d/
+
+# Exclude Terraform state backups anywhere
+**/terraform-state-backup.json
+**/terraform.tfstate.d/
